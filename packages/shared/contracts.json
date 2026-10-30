@@ -1,0 +1,87 @@
+{
+  "api_version": "v1",
+  "auxiliary_stages": [
+    "queued",
+    "awaiting_approval",
+    "exporting",
+    "done"
+  ],
+  "event_types": {
+    "cancelled": "Job cancelled by the user",
+    "charts": "Charts built from verified datapoints",
+    "completed": "Job finished successfully",
+    "contradiction": "Sources disagree (topic, evidence_ids)",
+    "evidence": "Quotes verified/discarded for a source",
+    "failed": "Job stopped (code, resumable)",
+    "followup": "Bounded follow-up search round",
+    "gap": "A sub-question lacks sufficient evidence",
+    "plan": "Research plan with sub-questions",
+    "query": "A search ran (query, provider, results, new_results, cached, subquestion_id)",
+    "query_failed": "A search failed (query, provider, error)",
+    "recovery": "Resumed from checkpoint after a restart",
+    "report": "Report published or a new version created",
+    "report_draft": "Draft written; citation validation summary",
+    "retry": "Transient failure; automatic retry scheduled",
+    "source_extracted": "Source text read (words, content_kind, injection_suspected)",
+    "source_found": "Candidate source selected (source_id, number, url, domain, provider)",
+    "source_rejected": "Source could not be accessed (reason)",
+    "sources_rejected": "Candidates set aside, with reason counts",
+    "stage": "Pipeline entered a stage (data.stage)",
+    "status": "Job status changed (data.status)",
+    "understanding": "Question restated; ambiguities, clarifying questions and assumptions",
+    "usage": "Usage counters updated",
+    "verification": "Cited sentences checked against quotes",
+    "warning": "Non-fatal problem (budget, injection, parse failure)"
+  },
+  "job_statuses": {
+    "active": [
+      "planning",
+      "searching",
+      "extracting",
+      "verifying",
+      "synthesizing"
+    ],
+    "idle": [
+      "queued",
+      "waiting_for_retry"
+    ],
+    "paused": [
+      "awaiting_approval"
+    ],
+    "terminal": [
+      "completed",
+      "failed",
+      "cancelled"
+    ]
+  },
+  "pipeline_stages": [
+    "understanding",
+    "planning",
+    "searching",
+    "reading",
+    "comparing",
+    "gaps",
+    "writing",
+    "verifying",
+    "visualizing"
+  ],
+  "research_modes": [
+    "quick",
+    "standard",
+    "deep",
+    "academic",
+    "competitive",
+    "technology",
+    "market",
+    "documents",
+    "verify_claim",
+    "counterarguments"
+  ],
+  "sse": {
+    "id": "monotonic per-job sequence number",
+    "poll_path": "/api/v1/research/{job_id}/events",
+    "resume_header": "Last-Event-ID",
+    "resume_query": "after",
+    "stream_path": "/api/v1/research/{job_id}/stream"
+  }
+}

@@ -1,0 +1,148 @@
+# Render Blueprint — STANDARD (paid) layout: separate private API + background worker. ~$14/month.
+# For the free layout use render.yaml. To use this file: New → Blueprint → set the Blueprint path to render.standard.yaml.
+#
+# Creates four resources from this repo (native Python/Node runtimes, no Docker):
+#   deep-research-web     public Next.js site (the only thing browsers talk to)
+#   deep-research-api     private FastAPI service (reachable only from the web service)
+#   deep-research-worker  background worker that runs research jobs
+#   deep-research-redis   Key Value (Redis-compatible) for queue delivery, rate limits, cache
+# MongoDB is external: create a free MongoDB Atlas cluster first (docs/deploy-render.md).
+#
+# Render prompts for two values when you create the Blueprint: FRONTEND_URL and MONGODB_URI.
+# Everything else (AI model, AI and search API keys) is configured in the app's admin console.
+# Step-by-step guide: docs/deploy-render.md
+#
+# REGION: every service must be in the same region (private networking), ideally the
+# region closest to your MongoDB Atlas cluster. It cannot be changed after creation.
+# Options: oregon, ohio, virginia, frankfurt, singapore.
+
+envVarGroups:
+  - name: deep-research-config
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: MONGODB_DATABASE
+        value: deep_research
+      # Email features need SMTP. Turn these on after adding SMTP_* settings (see the guide).
+      - key: EMAIL_VERIFICATION_ENABLED
+        value: "0"
+      - key: PASSWORD_RESET_ENABLED
+        value: "0"
+      - key: GOOGLE_AUTH_ENABLED
+        value: "0"
+      - key: DEMO_MODE
+        value: "0"
+      - key: EMBEDDED_WORKER
+        value: "0"
+      - key: BILLING_ENABLED
+        value: "0"
+      # Render's edge proxy adds exactly one X-Forwarded-For entry (the real client IP).
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      # Uploaded originals are parsed into MongoDB immediately; the local copy is temporary.
+      - key: UPLOAD_DIR
+        value: /tmp/deep-research-uploads
+      - key: WORKER_HEALTH_FILE
+        value: /tmp/deep-research-worker.alive
+      - key: LOG_LEVEL
+        value: INFO
+
+services:
+  # ---------------------------------------------------------------------------------------
+  - type: keyvalue
+    name: deep-research-redis
+    region: oregon
+    plan: free            # 25 MB, in-memory. Fine to start: Redis only delivers job IDs and caches;
+                          # MongoDB is the source of truth and the worker re-dispatches after restarts.
+    ipAllowList: []       # private network only
+    # Evict only keys that have a TTL (search cache, rate-limit counters, health beacons);
+    # the job queue has no TTL and is never evicted.
+    maxmemoryPolicy: volatile-lru
+
+  # ---------------------------------------------------------------------------------------
+  - type: pserv
+    name: deep-research-api
+    runtime: python
+    region: oregon
+    plan: 0.5c-512mb      # private services have no free tier
+    buildCommand: pip install --upgrade pip && pip install ./apps/api ./apps/worker
+    startCommand: >-
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
+      --timeout-graceful-shutdown 20 --no-server-header
+    buildFilter:
+      paths: ["apps/api/**", "apps/worker/**", "render.yaml"]
+    envVars:
+      - fromGroup: deep-research-config
+      - key: PORT
+        value: "8000"
+      # Generated once by Render and kept; the worker copies them below.
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEYS
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: deep-research-redis
+          property: connectionString
+      # --- You are prompted for these two when creating the Blueprint ---
+      - key: FRONTEND_URL      # https://deep-research-web.onrender.com — the web service's public URL, exactly
+        sync: false
+      - key: MONGODB_URI       # mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+        sync: false
+      # AI and search API keys are NOT set here: after the first login, an admin pastes them in
+      # Admin → AI providers. They are stored encrypted in MongoDB and shared with the worker.
+      # (Environment variables also work — add the same ones to BOTH api and worker.)
+
+  # ---------------------------------------------------------------------------------------
+  - type: worker
+    name: deep-research-worker
+    runtime: python
+    region: oregon
+    plan: 0.5c-512mb      # background workers have no free tier
+    buildCommand: pip install --upgrade pip && pip install ./apps/api ./apps/worker
+    startCommand: python -m deep_research_worker
+    buildFilter:
+      paths: ["apps/api/**", "apps/worker/**", "render.yaml"]
+    envVars:
+      - fromGroup: deep-research-config
+      - key: WORKER_CONCURRENCY
+        value: "3"
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: deep-research-redis
+          property: connectionString
+      # Same secrets and database as the API (entered once, on the API service).
+      - key: AUTH_SECRET
+        fromService: { type: pserv, name: deep-research-api, envVarKey: AUTH_SECRET }
+      - key: ENCRYPTION_KEYS
+        fromService: { type: pserv, name: deep-research-api, envVarKey: ENCRYPTION_KEYS }
+      - key: FRONTEND_URL
+        fromService: { type: pserv, name: deep-research-api, envVarKey: FRONTEND_URL }
+      - key: MONGODB_URI
+        fromService: { type: pserv, name: deep-research-api, envVarKey: MONGODB_URI }
+
+  # ---------------------------------------------------------------------------------------
+  - type: web
+    name: deep-research-web
+    runtime: node
+    region: oregon
+    plan: free            # spins down after 15 min idle (~1 min cold start). Use 0.5c-512mb to keep it warm.
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    startCommand: npx next start --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # Private address of the API ("host:port"); the proxy adds http:// itself.
+      - key: API_INTERNAL_URL
+        fromService:
+          type: pserv
+          name: deep-research-api
+          property: hostport

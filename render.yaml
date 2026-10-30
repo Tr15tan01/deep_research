@@ -1,0 +1,116 @@
+# Render Blueprint — FREE layout ($0 on Render). https://render.com/docs/blueprint-spec
+#
+#   deep-research-web    public Next.js site            (free web service)
+#   deep-research-api    FastAPI + research worker      (free web service, worker runs inside it)
+#   deep-research-redis  Key Value for queue/cache      (free)
+#   MongoDB              external: MongoDB Atlas M0     (free) — see docs/deploy-render.md
+#
+# Free-tier trade-offs (Render's rules, not this app's):
+#   - Both services sleep after 15 minutes without traffic; the first visit after that takes ~1 minute.
+#     While you keep a research page open, the page itself keeps them awake. If you close it mid-run, the
+#     job pauses and resumes from its checkpoint on your next visit.
+#   - 750 free instance hours per month are shared by both services (they only use hours while awake).
+#   - No email sending (SMTP ports are blocked on free services) and no Render Shell.
+# To scale up later, use render.standard.yaml (separate always-on worker, ~$14/month).
+#
+# Render asks for three values when you create the Blueprint: FRONTEND_URL, MONGODB_URI, API_INTERNAL_URL.
+# AI and search API keys are pasted later in the app (Admin → AI providers), stored encrypted in MongoDB.
+#
+# REGION: keep all three in one region, near your Atlas cluster. Options: oregon, ohio, virginia,
+# frankfurt, singapore. It cannot be changed after creation.
+
+services:
+  # ---------------------------------------------------------------------------------------
+  - type: keyvalue
+    name: deep-research-redis
+    region: oregon
+    plan: free            # 25 MB, in-memory; MongoDB is the source of truth, so a wipe only delays queued jobs
+    ipAllowList: []       # private network only
+    maxmemoryPolicy: volatile-lru   # evict cache keys (all have TTLs), never the job queue
+
+  # ---------------------------------------------------------------------------------------
+  - type: web
+    name: deep-research-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install ./apps/api ./apps/worker
+    startCommand: >-
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips '*'
+      --timeout-graceful-shutdown 20 --no-server-header
+    healthCheckPath: /health/ready
+    buildFilter:
+      paths: ["apps/api/**", "apps/worker/**", "render.yaml"]
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: MONGODB_DATABASE
+        value: deep_research
+      # Single-service mode: research jobs run inside this process (no paid background worker needed).
+      - key: EMBEDDED_WORKER
+        value: "1"
+      - key: WORKER_CONCURRENCY
+        value: "1"        # 512 MB instance: one research job at a time; others wait in the queue
+      - key: MAX_CONCURRENT_RESEARCH_JOBS_PER_USER
+        value: "1"
+      # Email needs SMTP, which free services can't reach. Keep these off on the free plan.
+      - key: EMAIL_VERIFICATION_ENABLED
+        value: "0"
+      - key: PASSWORD_RESET_ENABLED
+        value: "0"
+      - key: GOOGLE_AUTH_ENABLED
+        value: "0"
+      - key: DEMO_MODE
+        value: "0"
+      - key: BILLING_ENABLED
+        value: "0"
+      - key: UPLOAD_DIR
+        value: /tmp/deep-research-uploads
+      - key: LOG_LEVEL
+        value: INFO
+      # Generated once by Render and kept.
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEYS
+        generateValue: true
+      # This API has a public URL (free services can't receive private traffic), so it only accepts
+      # requests carrying this secret — which only the website's server knows. Health checks stay open.
+      - key: INTERNAL_PROXY_TOKEN
+        generateValue: true
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: deep-research-redis
+          property: connectionString
+      # --- You are prompted for these ---
+      - key: FRONTEND_URL      # https://deep-research-web.onrender.com — the website's URL, exactly
+        sync: false
+      - key: MONGODB_URI       # mongodb+srv://USER:PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+        sync: false
+
+  # ---------------------------------------------------------------------------------------
+  - type: web
+    name: deep-research-web
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: apps/web
+    buildCommand: npm ci && npm run build
+    startCommand: npx next start --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      # --- You are prompted for this ---
+      - key: API_INTERNAL_URL  # https://deep-research-api.onrender.com — the API service's URL
+        sync: false
+      # Same secret as the API; the website's server attaches it to every API call.
+      - key: INTERNAL_PROXY_TOKEN
+        fromService:
+          type: web
+          name: deep-research-api
+          envVarKey: INTERNAL_PROXY_TOKEN

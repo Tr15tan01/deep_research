@@ -1,0 +1,232 @@
+@import "tailwindcss";
+@import "@fontsource-variable/newsreader/opsz.css";
+@import "@fontsource-variable/newsreader/opsz-italic.css";
+@import "@fontsource-variable/instrument-sans/wdth.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Design tokens — "research workstation"
+  Ink navy foundation, cool fog paper in light mode.
+  Two accents with a single job each:
+    lamp  (gold)  = evidence: citations, highlighted passages, verified data
+    signal (cyan) = the agent at work: live activity, running states
+*/
+:root {
+  --bg: #f2f4f8;
+  --bg-deep: #e8ecf3;
+  --surface: #ffffff;
+  --surface-2: #f7f8fb;
+  --line: #dde2ec;
+  --line-strong: #c7cedc;
+  --text: #141a26;
+  --text-2: #3d4659;
+  --muted: #667089;
+  --lamp: #a87708;
+  --lamp-soft: #fbefcc;
+  --lamp-ink: #5b3f00;
+  --signal: #0e8aa3;
+  --signal-soft: #d8f3f8;
+  --danger: #c2413b;
+  --danger-soft: #fde4e2;
+  --ok: #217a52;
+  --ok-soft: #dcf3e7;
+  --warn: #9a5b00;
+  --warn-soft: #fff0d6;
+  --focus: #0e8aa3;
+  --shadow-1: 0 1px 2px rgba(20, 26, 38, 0.06), 0 2px 8px rgba(20, 26, 38, 0.04);
+  --shadow-2: 0 10px 40px -12px rgba(20, 26, 38, 0.22);
+  --glass: rgba(255, 255, 255, 0.7);
+  /* Categorical chart slots, fixed order (validated: light surface #ffffff). */
+  --series-1: #b47f0a;
+  --series-2: #1690a8;
+  --series-3: #d0573f;
+  --series-4: #6d5bd0;
+  --series-5: #2f8f5b;
+  --series-6: #b04f8f;
+}
+
+.dark {
+  --bg: #0a1220;
+  --bg-deep: #070d18;
+  --surface: #101a2c;
+  --surface-2: #142036;
+  --line: rgba(160, 180, 215, 0.13);
+  --line-strong: rgba(160, 180, 215, 0.24);
+  --text: #e3e9f3;
+  --text-2: #b8c3d6;
+  --muted: #8592ab;
+  --lamp: #e2b84a;
+  --lamp-soft: rgba(226, 184, 74, 0.14);
+  --lamp-ink: #f3d68a;
+  --signal: #43c6db;
+  --signal-soft: rgba(67, 198, 219, 0.13);
+  --danger: #f07167;
+  --danger-soft: rgba(240, 113, 103, 0.13);
+  --ok: #5cc28f;
+  --ok-soft: rgba(92, 194, 143, 0.13);
+  --warn: #f0b45a;
+  --warn-soft: rgba(240, 180, 90, 0.13);
+  --focus: #43c6db;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 18px 60px -20px rgba(0, 0, 0, 0.7);
+  --glass: rgba(16, 26, 44, 0.62);
+  /* Same hues stepped for the dark surface (validated against #101a2c). */
+  --series-1: #b88a22;
+  --series-2: #1a97ac;
+  --series-3: #d55a42;
+  --series-4: #8a7ae6;
+  --series-5: #349563;
+  --series-6: #d0619f;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-deep: var(--bg-deep);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-muted: var(--muted);
+  --color-lamp: var(--lamp);
+  --color-lamp-soft: var(--lamp-soft);
+  --color-lamp-ink: var(--lamp-ink);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-glass: var(--glass);
+
+  --font-serif: "Newsreader Variable", "Iowan Old Style", Georgia, serif;
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: var(--lamp-soft);
+    color: var(--text);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer components {
+  /* Editorial headline scale (Newsreader, optical sizing on). */
+  .display {
+    font-family: var(--font-serif);
+    font-optical-sizing: auto;
+    font-weight: 380;
+    letter-spacing: -0.022em;
+    line-height: 1.02;
+  }
+  .headline {
+    font-family: var(--font-serif);
+    font-weight: 450;
+    letter-spacing: -0.012em;
+    line-height: 1.15;
+  }
+  /* Long-form report text: serif, generous leading, < 72ch measure. */
+  .prose-report {
+    font-family: var(--font-serif);
+    font-size: 1.105rem;
+    line-height: 1.72;
+    color: var(--text);
+    max-width: 68ch;
+  }
+  .prose-report p + p {
+    margin-top: 0.95em;
+  }
+  .hairline {
+    border-color: var(--line);
+  }
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+  }
+  /* The "highlighter" treatment for verified evidence passages. */
+  .evidence-mark {
+    background: linear-gradient(transparent 8%, var(--lamp-soft) 8%, var(--lamp-soft) 92%, transparent 92%);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    padding: 0 0.15em;
+    color: inherit;
+  }
+  .grain {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 3px 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--signal) 55%, transparent); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0, var(--line) 40%, var(--surface-2) 80%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+.live-dot {
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+
+@media print {
+  body { background: #fff; color: #000; }
+  .no-print { display: none !important; }
+  .prose-report { max-width: none; font-size: 11pt; }
+  a { color: inherit; text-decoration: none; }
+}

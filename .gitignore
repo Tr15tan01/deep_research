@@ -1,0 +1,37 @@
+# Secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+apps/web/AGENTS.md
+apps/web/test-results/
+apps/web/playwright-report/
+
+# Local data
+/data/
+uploads/
+tests/eval/results/*.json
+!tests/eval/results/baseline-*.json
+!tests/eval/results/.gitkeep
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

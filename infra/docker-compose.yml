@@ -1,0 +1,89 @@
+# Local development / single-host stack.
+#
+#   cp .env.example .env            # then fill in keys (or set DEMO_MODE=1)
+#   docker compose -f infra/docker-compose.yml up --build
+#   open http://localhost:3000
+#
+# MongoDB runs as a single-node replica set so transactions and change streams behave like
+# Atlas. For production, point MONGODB_URI at Atlas and drop the `mongo` service
+# (see docs/deployment.md).
+
+name: deep-research
+
+x-python-env: &python-env
+  env_file: [../.env]
+  environment:
+    MONGODB_URI: ${MONGODB_URI_OVERRIDE:-mongodb://mongo:27017/?replicaSet=rs0&directConnection=true}
+    REDIS_URL: redis://redis:6379/0
+    FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    API_URL: http://api:8000
+    APP_ENV: ${APP_ENV:-development}
+    EMBEDDED_WORKER: "0"
+    UPLOAD_DIR: /var/lib/deep-research/uploads
+  depends_on:
+    mongo: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  restart: unless-stopped
+
+services:
+  mongo:
+    image: mongo:8.0
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    volumes: [mongo-data:/data/db]
+    ports: ["127.0.0.1:27017:27017"]
+    healthcheck:
+      # Initiates the replica set on first boot, then reports primary status.
+      test: ["CMD", "mongosh", "--quiet", "--eval",
+             "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes: [redis-data:/data]
+    ports: ["127.0.0.1:6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    <<: *python-env
+    build: { context: .., dockerfile: infra/docker/python.Dockerfile, target: api }
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: [uploads:/var/lib/deep-research/uploads]
+    stop_grace_period: 25s
+
+  worker:
+    <<: *python-env
+    build: { context: .., dockerfile: infra/docker/python.Dockerfile, target: worker }
+    volumes: [uploads:/var/lib/deep-research/uploads]
+    # Long enough for in-flight steps to checkpoint and release their leases on SIGTERM.
+    stop_grace_period: 40s
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+
+  web:
+    build: { context: .., dockerfile: infra/docker/web.Dockerfile }
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+
+  # Optional malware scanning for uploads: `docker compose --profile scan up`
+  # and set CLAMAV_HOST=clamav in .env.
+  clamav:
+    image: clamav/clamav:1.4
+    profiles: [scan]
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  redis-data:
+  uploads:

@@ -1,0 +1,18 @@
+[project]
+name = "deep-research-worker"
+version = "1.0.0"
+description = "Deep Research background worker — runs research, regeneration and export jobs"
+requires-python = ">=3.12,<3.14"
+# The engine is the shared `app` package from apps/api (installed alongside in the image
+# and in local development: `pip install -e apps/api -e apps/worker`).
+dependencies = ["deep-research-api"]
+
+[project.scripts]
+deep-research-worker = "deep_research_worker.__main__:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["deep_research_worker*"]

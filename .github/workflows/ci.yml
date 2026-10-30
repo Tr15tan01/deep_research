@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - name: Install redis-server (for real-Redis worker tests)
+        run: sudo apt-get update && sudo apt-get install -y redis-server
+      - name: Install
+        run: |
+          uv venv -p 3.13 .venv
+          uv pip install --python .venv/bin/python -e '.[dev]' -e ../worker pip-audit
+      - name: Lint
+        run: .venv/bin/ruff check app tests ../worker ../../tests/eval
+      - name: Shared contracts are current
+        run: ENV_FILE=/dev/null .venv/bin/python -m app.contracts --check
+      - name: Tests
+        run: .venv/bin/python -m pytest -q
+      - name: Agent evaluation (demo providers, regression thresholds)
+        run: .venv/bin/python ../../tests/eval/run_eval.py --out ../../tests/eval/results/ci-demo.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: eval-demo, path: tests/eval/results/ci-demo.json, if-no-files-found: ignore }
+      - name: Dependency audit
+        run: .venv/bin/pip-audit --skip-editable || true  # advisory; review findings in the log
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx eslint .
+      - run: npx vitest run
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high || true  # advisory
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: apps/web/package-lock.json }
+      - name: Install backend
+        working-directory: apps/api
+        run: uv venv -p 3.13 .venv && uv pip install --python .venv/bin/python -e '.[dev]' -e ../worker
+      - name: Install frontend
+        working-directory: apps/web
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Playwright
+        working-directory: apps/web
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-report, path: apps/web/playwright-report }
+
+  images:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build api
+        run: docker build -f infra/docker/python.Dockerfile --target api -t deep-research-api:ci .
+      - name: Build worker
+        run: docker build -f infra/docker/python.Dockerfile --target worker -t deep-research-worker:ci .
+      - name: Build web
+        run: docker build -f infra/docker/web.Dockerfile -t deep-research-web:ci .
+      - name: Smoke-test api image (fails fast on invalid production config, as designed)
+        run: |
+          docker run --rm -e APP_ENV=production deep-research-api:ci python -c "from app.core.config import Settings; Settings()" \
+            && { echo "expected production config validation to fail"; exit 1; } || echo "production validation enforced"
+      - name: Validate compose file
+        run: cp .env.example .env && docker compose -f infra/docker-compose.yml config --quiet

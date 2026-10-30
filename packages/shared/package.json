@@ -1,0 +1,11 @@
+{
+  "name": "@deep-research/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API contracts shared by the FastAPI backend and the Next.js frontend (generated — do not edit by hand).",
+  "files": ["contracts.json", "openapi.json"],
+  "exports": {
+    "./contracts.json": "./contracts.json",
+    "./openapi.json": "./openapi.json"
+  }
+}
