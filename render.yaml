@@ -2,7 +2,7 @@
 #
 #   deep-research-web    public Next.js site            (free web service)
 #   deep-research-api    FastAPI + research worker      (free web service, worker runs inside it)
-#   deep-research-redis  Key Value for queue/cache      (free)
+#   (no Redis service)   the API keeps its queue/cache in process memory (REDIS_URL=memory://)
 #   MongoDB              external: MongoDB Atlas M0     (free) — see docs/deploy-render.md
 #
 # Free-tier trade-offs (Render's rules, not this app's):
@@ -16,18 +16,10 @@
 # Render asks for three values when you create the Blueprint: FRONTEND_URL, MONGODB_URI, API_INTERNAL_URL.
 # AI and search API keys are pasted later in the app (Admin → AI providers), stored encrypted in MongoDB.
 #
-# REGION: keep all three in one region, near your Atlas cluster. Options: oregon, ohio, virginia,
+# REGION: keep both services in one region, near your Atlas cluster. Options: oregon, ohio, virginia,
 # frankfurt, singapore. It cannot be changed after creation.
 
 services:
-  # ---------------------------------------------------------------------------------------
-  - type: keyvalue
-    name: deep-research-redis
-    region: oregon
-    plan: free            # 25 MB, in-memory; MongoDB is the source of truth, so a wipe only delays queued jobs
-    ipAllowList: []       # private network only
-    maxmemoryPolicy: volatile-lru   # evict cache keys (all have TTLs), never the job queue
-
   # ---------------------------------------------------------------------------------------
   - type: web
     name: deep-research-api
@@ -79,11 +71,12 @@ services:
       # requests carrying this secret — which only the website's server knows. Health checks stay open.
       - key: INTERNAL_PROXY_TOKEN
         generateValue: true
+      # No Key Value instance: queue delivery, rate limits and caches live in this process's memory.
+      # Safe because the worker runs in the same process and MongoDB is the source of truth (the reconciler
+      # re-enqueues pending jobs after a restart). Keep this service at ONE instance. To use a real Redis
+      # instead (e.g. an existing Key Value or Upstash), replace the value with its redis:// / rediss:// URL.
       - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: deep-research-redis
-          property: connectionString
+        value: memory://
       # --- You are prompted for these ---
       - key: FRONTEND_URL      # https://deep-research-web.onrender.com — the website's URL, exactly
         sync: false

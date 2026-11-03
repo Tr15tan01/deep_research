@@ -11,6 +11,7 @@ dependencies = [
   "email-validator>=2.2",
   "pymongo>=4.13",          # official async driver (AsyncMongoClient)
   "redis>=5.2",
+  "fakeredis>=2.26",       # REDIS_URL=memory:// (single-process hosting)
   "argon2-cffi>=23.1",
   "pyjwt[crypto]>=2.9",
   "cryptography>=43",
@@ -31,7 +32,6 @@ dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
   "respx>=0.22",
-  "fakeredis>=2.26",
   "mongomock-motor>=0.0.35",
   "motor>=3.6",
   "ruff>=0.8",

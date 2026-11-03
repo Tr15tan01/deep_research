@@ -4,7 +4,7 @@ This uses Render's **native Python and Node runtimes** (no Docker). There are tw
 
 | File | Monthly cost on Render | What you get |
 | --- | --- | --- |
-| [`render.yaml`](../render.yaml) **(default)** | **$0** | Website + API (research runs inside the API) + Redis, all on free instances. |
+| [`render.yaml`](../render.yaml) **(default)** | **$0** | Website + API (research and its queue run inside the API), all on free instances. No Key Value needed. |
 | [`render.standard.yaml`](../render.standard.yaml) | ~$14 | Always-on private API + separate background worker. See [Upgrading](#upgrading-to-the-standard-layout). |
 
 The free layout creates:
@@ -13,7 +13,6 @@ The free layout creates:
 | --- | --- | --- | --- |
 | `deep-research-web` | Web service (Node) | Free | The website. |
 | `deep-research-api` | Web service (Python) | Free | FastAPI **and** the research worker in one process. It has a public URL, but it rejects every request that doesn't carry a secret only the website's server knows. |
-| `deep-research-redis` | Key Value | Free | Job delivery, rate limits, cache. |
 | MongoDB | **MongoDB Atlas** (external) | Free M0 | The durable database. Render does not host MongoDB. |
 
 Your only other costs are the AI and search APIs, and both have free tiers (see step 7).
@@ -29,8 +28,11 @@ Your only other costs are the AI and search APIs, and both have free tiers (see 
   them suspended until the next month, so don't.
 - **One research job at a time** on the 512 MB free instance; additional jobs wait in the queue.
 - **No email** (free services can't reach SMTP ports) and **no Render Shell**. The steps below avoid needing either.
-- Free Key Value is in-memory (25 MB) and is wiped on restart. That's fine: Redis only *delivers* jobs, and pending
-  work is re-dispatched from MongoDB automatically.
+- **No Redis service.** The API uses `REDIS_URL=memory://`: job delivery, rate limits and caches live in the API
+  process and reset when it sleeps or restarts. That's fine: Redis only *delivers* jobs, and pending work is
+  re-dispatched from MongoDB automatically. It also means the API must run as a **single instance**. (This avoids
+  Render's one-free-Key-Value-per-account limit. If you'd rather use a real Redis, e.g. an existing Key Value or a free
+  Upstash database, set `REDIS_URL` to its `redis://`/`rediss://` URL.)
 
 > Render deploys from a Git repository (GitHub, GitLab or Bitbucket). It does not accept uploaded zip or rar files,
 > so step 1 is to put this code in a repository.
@@ -47,8 +49,8 @@ git branch -M main && git push -u origin main
 
 (GitHub Desktop works too: *File → Add local repository → Publish*.)
 
-**Region**: `render.yaml` uses `oregon` (US West) for all three services, and the region can't be changed after
-creation. For Europe or nearby, change all three `region: oregon` lines to `region: frankfurt`, commit and push before
+**Region**: `render.yaml` uses `oregon` (US West) for both services, and the region can't be changed after
+creation. For Europe or nearby, change both `region: oregon` lines to `region: frankfurt`, commit and push before
 step 3.
 
 ## 2. Create the MongoDB Atlas database (free)

@@ -218,6 +218,10 @@ class Settings(BaseSettings):
         return self.MONGODB_URI.startswith("mongomock://")
 
     @property
+    def uses_memory_redis(self) -> bool:
+        return self.REDIS_URL.startswith("memory://")
+
+    @property
     def log_json(self) -> bool:
         return self.LOG_JSON if self.LOG_JSON is not None else self.is_production
 
@@ -257,7 +261,13 @@ class Settings(BaseSettings):
             if not self.MONGODB_URI or self.uses_memory_db:
                 errors.append("MONGODB_URI must point to MongoDB (Atlas) in production.")
             if not self.REDIS_URL:
-                errors.append("REDIS_URL is required in production.")
+                errors.append("REDIS_URL is required in production (memory:// for single-process hosting).")
+            elif self.uses_memory_redis:
+                if not self.EMBEDDED_WORKER:
+                    errors.append("REDIS_URL=memory:// requires EMBEDDED_WORKER=1 (API and worker must share one process).")
+                else:
+                    warnings.append("REDIS_URL=memory://: queue, rate limits and caches live in process memory and reset "
+                                    "on restart. Run exactly one API instance; use a real Redis to scale out.")
             if not self.FRONTEND_URL.startswith("https://"):
                 errors.append("FRONTEND_URL must use https in production.")
             if self.DEMO_MODE:

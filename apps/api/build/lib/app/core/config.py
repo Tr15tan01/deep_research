@@ -139,7 +139,10 @@ class Settings(BaseSettings):
     FILE_UPLOADS_ENABLED: Flag = True
     CHARTS_ENABLED: Flag = True
     PUBLIC_REPORT_SHARING_ENABLED: Flag = False
-    EMBEDDED_WORKER: Flag = False  # dev only: run the worker loop inside the API process
+    EMBEDDED_WORKER: Flag = False  # run the worker loop inside the API process (dev, or single-service hosting)
+    # When set, every API request except /health/* must carry this value in X-Internal-Token — used when
+    # the API has a public URL but should only be reachable through the web app's proxy (e.g. Render free tier).
+    INTERNAL_PROXY_TOKEN: str = ""
 
     # --- Limits -----------------------------------------------------------------------
     MAX_CONCURRENT_RESEARCH_JOBS_PER_USER: int = Field(2, ge=1, le=50)
@@ -215,6 +218,10 @@ class Settings(BaseSettings):
         return self.MONGODB_URI.startswith("mongomock://")
 
     @property
+    def uses_memory_redis(self) -> bool:
+        return self.REDIS_URL.startswith("memory://")
+
+    @property
     def log_json(self) -> bool:
         return self.LOG_JSON if self.LOG_JSON is not None else self.is_production
 
@@ -254,13 +261,22 @@ class Settings(BaseSettings):
             if not self.MONGODB_URI or self.uses_memory_db:
                 errors.append("MONGODB_URI must point to MongoDB (Atlas) in production.")
             if not self.REDIS_URL:
-                errors.append("REDIS_URL is required in production.")
+                errors.append("REDIS_URL is required in production (memory:// for single-process hosting).")
+            elif self.uses_memory_redis:
+                if not self.EMBEDDED_WORKER:
+                    errors.append("REDIS_URL=memory:// requires EMBEDDED_WORKER=1 (API and worker must share one process).")
+                else:
+                    warnings.append("REDIS_URL=memory://: queue, rate limits and caches live in process memory and reset "
+                                    "on restart. Run exactly one API instance; use a real Redis to scale out.")
             if not self.FRONTEND_URL.startswith("https://"):
                 errors.append("FRONTEND_URL must use https in production.")
             if self.DEMO_MODE:
                 errors.append("DEMO_MODE=1 is not allowed in production.")
             if self.EMBEDDED_WORKER:
-                errors.append("EMBEDDED_WORKER=1 is not allowed in production; run apps/worker.")
+                warnings.append("EMBEDDED_WORKER=1: research jobs run inside the API process (single-service mode). "
+                                "Fine for small or free-tier deployments; run apps/worker separately to scale.")
+            if self.INTERNAL_PROXY_TOKEN and len(self.INTERNAL_PROXY_TOKEN) < 32:
+                errors.append("INTERNAL_PROXY_TOKEN must be at least 32 characters.")
             if (self.email_verification_required or self.PASSWORD_RESET_ENABLED) and not self.smtp_configured:
                 errors.append("SMTP_HOST and EMAIL_FROM are required when email verification or password reset is enabled.")
             if not self.ENCRYPTION_KEYS:

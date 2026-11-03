@@ -46,6 +46,9 @@ async def _run(args: argparse.Namespace) -> None:
         log.warning("memory_db_worker",
                     note="MONGODB_URI=mongomock:// is per-process; a separate worker cannot see API jobs. "
                          "Use EMBEDDED_WORKER=1 for in-memory development or point both at MongoDB.")
+    if s.uses_memory_redis:
+        raise SystemExit("REDIS_URL=memory:// is per-process; a separate worker cannot see the API's queue. "
+                         "Use EMBEDDED_WORKER=1 on the API instead, or point both at a real Redis.")
     await connect()
     await ensure_indexes()
     await connect_redis()
